@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Charger Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0b10;
+            --card: #151921;
+            --accent: #00d2ff;
+            --text: #ffffff;
+            --muted: #8b949e;
+            --success: #23d18b;
+            --warning: #f5a623;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 400px;
+            background: var(--card);
+            padding: 2rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        h1 {
+            margin: 0 0 1.5rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            background: rgba(35, 209, 139, 0.1);
+            color: var(--success);
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.2rem;
+        }
+
+        .item {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.8rem;
+        }
+
+        .item:last-child {
+            border: none;
+        }
+
+        .label {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-bottom: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .charging-on {
+            color: var(--warning);
+        }
+
+        .charging-off {
+            color: var(--success);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .refresh-hint {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+    </style>
+    <script>
+        let currentChargingStart = null;
+
+        function formatTime(totalSeconds) {
+            if (isNaN(totalSeconds) || totalSeconds === null) return "N/A";
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = Math.floor(totalSeconds % 60); // Added floor here
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        function tick() {
+            if (currentChargingStart) {
+                const now = Math.floor(Date.now() / 1000);
+                const diff = now - currentChargingStart;
+                const el = document.getElementById('session_time');
+                if (el) el.innerText = formatTime(Math.max(0, diff));
+            }
+        }
+
+        async function update() {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                const data = await res.json();
+
+                document.getElementById('bot_uptime').innerText = data.bot_uptime || "N/A";
+
+                const chargingEl = document.getElementById('charging');
+                if (chargingEl) {
+                    chargingEl.innerText = data.charging ? 'Plugged In (🔌)' : 'Unplugged (💤)';
+                    chargingEl.className = 'value ' + (data.charging ? 'charging-on' : 'charging-off');
+                }
+
+                const sessionRow = document.getElementById('session_row');
+                const notifyRow = document.getElementById('notify_row');
+
+                if (data.charging) {
+                    sessionRow.classList.remove('hidden');
+                    notifyRow.classList.remove('hidden');
+
+                    currentChargingStart = data.charging_start_utc;
+                    document.getElementById('notify_time').innerText = data.next_notification || "N/A";
+
+                    if (currentChargingStart) {
+                        const now = Math.floor(Date.now() / 1000);
+                        document.getElementById('session_time').innerText = formatTime(Math.max(0, now - currentChargingStart));
+                    }
+                } else {
+                    sessionRow.classList.add('hidden');
+                    notifyRow.classList.add('hidden');
+                    currentChargingStart = null;
+                }
+            } catch (e) {
+                console.error("Dashboard update failed:", e);
+                document.getElementById('bot_uptime').innerText = "Sync Error";
+            }
+        }
+
+        setInterval(update, 5000);
+        setInterval(tick, 1000);
+        window.onload = update;
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="status-badge">● Bot System Active</div>
+        <h1>EV Charger Dashboard</h1>
+        <div class="grid">
+            <div class="item">
+                <div class="label">System Uptime</div>
+                <div id="bot_uptime" class="value">...</div>
+            </div>
+            <div class="item">
+                <div class="label">Vehicle State</div>
+                <div id="charging" class="value">...</div>
+            </div>
+            <div id="session_row" class="item hidden">
+                <div class="label">Time since Plugged In</div>
+                <div id="session_time" class="value">...</div>
+            </div>
+            <div id="notify_row" class="item hidden">
+                <div class="label">Next Notification</div>
+                <div id="notify_time" class="value">...</div>
+            </div>
+        </div>
+        <div class="refresh-hint">Server sync: 5s | Visuals: 1s</div>
+    </div>
+</body>
+
+</html>
