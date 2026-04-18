@@ -15,6 +15,7 @@ class SharedState:
         self.is_muted = False
         self.muted_until = None
         self.last_reminder_date = None
+        self.last_reminder_id = None
         
         self._init_db()
         self._load_state()
@@ -50,6 +51,8 @@ class SharedState:
                 self.next_interval_time = datetime.fromisoformat(data["next_interval_time"])
             if "last_reminder_date" in data and data["last_reminder_date"] != "None":
                 self.last_reminder_date = datetime.fromisoformat(data["last_reminder_date"]).date()
+            if "last_reminder_id" in data and data["last_reminder_id"] != "None":
+                self.last_reminder_id = int(data["last_reminder_id"])
 
     def save(self):
         with sqlite3.connect(self.db_path) as conn:
@@ -60,6 +63,7 @@ class SharedState:
             conn.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", ("next_target_time", self.next_target_time.isoformat() if self.next_target_time else "None"))
             conn.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", ("next_interval_time", self.next_interval_time.isoformat() if self.next_interval_time else "None"))
             conn.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", ("last_reminder_date", self.last_reminder_date.isoformat() if self.last_reminder_date else "None"))
+            conn.execute("INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)", ("last_reminder_id", str(self.last_reminder_id) if self.last_reminder_id else "None"))
             conn.commit()
 
     def set_plugged(self):

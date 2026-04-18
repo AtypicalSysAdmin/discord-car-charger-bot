@@ -5,9 +5,13 @@ from state import state
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+import asyncio
 
 app = Flask(__name__)
 tz_pacific = pytz.timezone('US/Pacific')
+
+# Global pointer to the bot instance
+bot_ptr = None
 
 def get_status_data():
     now = datetime.now(timezone.utc)
@@ -90,6 +94,20 @@ def action_unmute():
     state.set_unmute()
     return jsonify({"status": "success"})
 
-def run_dashboard():
+@app.route('/api/action/clear_history', methods=['POST'])
+def action_clear_history():
+    if bot_ptr:
+        async def do_clear():
+            user = await bot_ptr.fetch_user(int(bot_ptr.user_id))
+            channel = user.dm_channel or await user.create_dm()
+            await bot_ptr._clear_history(channel)
+        
+        asyncio.run_coroutine_threadsafe(do_clear(), bot_ptr.loop)
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error", "message": "Bot pointer not initialized"}), 500
+
+def run_dashboard(bot_instance=None):
+    global bot_ptr
+    bot_ptr = bot_instance
     port = int(os.getenv('DASHBOARD_PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)

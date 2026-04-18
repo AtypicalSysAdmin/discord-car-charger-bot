@@ -25,7 +25,7 @@ def main():
     
     # 3. Start the Flask Dashboard in a separate thread
     # This allows Flask to run without blocking the Discord bot
-    flask_thread = threading.Thread(target=run_dashboard, daemon=True)
+    flask_thread = threading.Thread(target=run_dashboard, args=(bot,), daemon=True)
     flask_thread.start()
     print("Dashboard thread started.")
 
