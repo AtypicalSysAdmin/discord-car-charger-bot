@@ -28,7 +28,6 @@ class ChargerBot(commands.Bot):
 
     async def reminder_loop(self):
         await self.wait_until_ready()
-        last_reminder_date = None
         
         while True:
             now_utc = datetime.now(timezone.utc)
@@ -42,25 +41,41 @@ class ChargerBot(commands.Bot):
                 next_target_pacific = target_today
             
             state.next_target_time = next_target_pacific.astimezone(timezone.utc)
+            state.save()
 
             # 2. Check if we should send a reminder
             if state.charging_active:
+                # Check for mute expiration
+                if state.is_muted and state.muted_until:
+                    if now_utc >= state.muted_until:
+                        state.is_muted = False
+                        state.muted_until = None
+                        state.save()
+                        print("Mute expired. Resuming notifications.")
+                
+                if state.is_muted:
+                    await asyncio.sleep(30)
+                    continue
+
+                # Original reminder logic follows...
                 # If we are past today's target time AND we haven't sent a reminder yet today
-                if now_pacific >= target_today and last_reminder_date != now_pacific.date():
+                if now_pacific >= target_today and state.last_reminder_date != now_pacific.date():
                     try:
                         user = await self.fetch_user(int(self.user_id))
                         await user.send("🚨 Reminder: Unplug your car!")
-                        last_reminder_date = now_pacific.date()
+                        state.last_reminder_date = now_pacific.date()
                         state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
+                        state.save()
                         print(f"Sent daily reminder at {now_pacific}")
                     except Exception as e:
                         print(f"Failed to send reminder: {e}")
                 
                 # If we already sent the daily reminder, handle nag logic
-                elif last_reminder_date == now_pacific.date():
+                elif state.last_reminder_date == now_pacific.date():
                     # If we don't have a next nag time set (e.g. just plugged back in), set one
                     if not state.next_interval_time:
                         state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
+                        state.save()
                         print(f"Car replugged after daily reminder. Next nag scheduled for {state.next_interval_time}")
                     
                     # Check if it's time to nag
@@ -69,6 +84,7 @@ class ChargerBot(commands.Bot):
                             user = await self.fetch_user(int(self.user_id))
                             await user.send("⚠️ Still plugged in! Don't forget to unplug.")
                             state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
+                            state.save()
                             print(f"Sent nag reminder at {now_pacific}")
                         except Exception as e:
                             print(f"Failed to send nag: {e}")
@@ -81,15 +97,22 @@ class ChargerBot(commands.Bot):
 def setup_bot(bot, token):
     @bot.tree.command(name="plugged", description="Enable car charging reminders")
     async def plugged(interaction: discord.Interaction):
-        state.charging_active = True
-        state.charging_start_time = datetime.now(timezone.utc)
+        state.set_plugged()
         await interaction.response.send_message("🔌 Noted. Reminders enabled.")
 
     @bot.tree.command(name="unplugged", description="Disable car charging reminders")
     async def unplugged(interaction: discord.Interaction):
-        state.charging_active = False
-        state.charging_start_time = None
-        state.next_interval_time = None
+        state.set_unplugged()
         await interaction.response.send_message("📴 Done. Reminders off.")
+
+    @bot.tree.command(name="mute", description="Mute reminders until 6 AM PST")
+    async def mute(interaction: discord.Interaction):
+        mute_until = state.set_mute(bot.tz_pacific)
+        await interaction.response.send_message(f"🔇 Muted until {mute_until.strftime('%I:%M %p %Z')}")
+
+    @bot.tree.command(name="unmute", description="Unmute reminders")
+    async def unmute(interaction: discord.Interaction):
+        state.set_unmute()
+        await interaction.response.send_message("🔊 Unmuted. Reminders active.")
 
     return bot

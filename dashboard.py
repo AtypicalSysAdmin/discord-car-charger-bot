@@ -48,7 +48,9 @@ def get_status_data():
         "bot_uptime": f"{uptime_delta.days}d {uptime_delta.seconds // 3600}h {(uptime_delta.seconds // 60) % 60}m",
         "charging": state.charging_active,
         "charging_start_utc": start_utc,
-        "next_notification": notify_time_str
+        "next_notification": notify_time_str,
+        "is_muted": state.is_muted,
+        "muted_until": state.muted_until.astimezone(tz_pacific).strftime("%I:%M %p") if state.muted_until else None
     }
 
 @app.route('/')
@@ -67,6 +69,26 @@ def status():
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
+@app.route('/api/action/plugged', methods=['POST'])
+def action_plugged():
+    state.set_plugged()
+    return jsonify({"status": "success"})
+
+@app.route('/api/action/unplugged', methods=['POST'])
+def action_unplugged():
+    state.set_unplugged()
+    return jsonify({"status": "success"})
+
+@app.route('/api/action/mute', methods=['POST'])
+def action_mute():
+    state.set_mute(tz_pacific)
+    return jsonify({"status": "success"})
+
+@app.route('/api/action/unmute', methods=['POST'])
+def action_unmute():
+    state.set_unmute()
+    return jsonify({"status": "success"})
 
 def run_dashboard():
     port = int(os.getenv('DASHBOARD_PORT', 5000))

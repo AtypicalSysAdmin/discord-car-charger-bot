@@ -106,6 +106,65 @@
             text-align: center;
             margin-top: 1.5rem;
         }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.8rem;
+            margin-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 1.5rem;
+        }
+
+        .btn {
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-plugged {
+            background: rgba(245, 166, 35, 0.1);
+            color: var(--warning);
+            border: 1px solid rgba(245, 166, 35, 0.2);
+        }
+
+        .btn-plugged:hover {
+            background: rgba(245, 166, 35, 0.2);
+        }
+
+        .btn-unplugged {
+            background: rgba(35, 209, 139, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(35, 209, 139, 0.2);
+        }
+
+        .btn-unplugged:hover {
+            background: rgba(35, 209, 139, 0.2);
+        }
+
+        .btn-mute {
+            grid-column: span 2;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-mute:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
     </style>
     <script>
         let currentChargingStart = null;
@@ -160,10 +219,37 @@
                     notifyRow.classList.add('hidden');
                     currentChargingStart = null;
                 }
+
+                const muteRow = document.getElementById('mute_row');
+                const muteBtn = document.getElementById('mute_btn');
+                if (data.is_muted) {
+                    muteRow.classList.remove('hidden');
+                    document.getElementById('mute_status').innerText = `Muted until ${data.muted_until} (🔇)`;
+                    muteBtn.innerText = '🔊 Unmute Notifications';
+                } else {
+                    muteRow.classList.add('hidden');
+                    muteBtn.innerText = '🔇 Mute until 6 AM';
+                }
             } catch (e) {
                 console.error("Dashboard update failed:", e);
                 document.getElementById('bot_uptime').innerText = "Sync Error";
             }
+        }
+
+        async function sendAction(action) {
+            try {
+                const res = await fetch(`/api/action/${action}`, { method: 'POST' });
+                if (res.ok) {
+                    update(); // Refresh UI immediately
+                }
+            } catch (e) {
+                console.error(`Action ${action} failed:`, e);
+            }
+        }
+
+        function toggleMute() {
+            const isCurrentlyMuted = !document.getElementById('mute_row').classList.contains('hidden');
+            sendAction(isCurrentlyMuted ? 'unmute' : 'mute');
         }
 
         setInterval(update, 5000);
@@ -193,7 +279,18 @@
                 <div class="label">Next Notification</div>
                 <div id="notify_time" class="value">...</div>
             </div>
+            <div id="mute_row" class="item hidden">
+                <div class="label">Notification Status</div>
+                <div id="mute_status" class="value" style="color: var(--muted);">...</div>
+            </div>
         </div>
+
+        <div class="controls">
+            <button onclick="sendAction('plugged')" class="btn btn-plugged">🔌 Plugged In</button>
+            <button onclick="sendAction('unplugged')" class="btn btn-unplugged">💤 Unplugged</button>
+            <button id="mute_btn" onclick="toggleMute()" class="btn btn-mute">🔇 Mute until 6 AM</button>
+        </div>
+
         <div class="refresh-hint">Server sync: 5s | Visuals: 1s</div>
     </div>
 </body>
