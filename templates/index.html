@@ -214,10 +214,17 @@
 
                 const sessionRow = document.getElementById('session_row');
                 const notifyRow = document.getElementById('notify_row');
+                const shiftRow = document.getElementById('shift_row');
 
                 if (data.charging) {
                     sessionRow.classList.remove('hidden');
                     notifyRow.classList.remove('hidden');
+                    if (data.shift_display) {
+                        shiftRow.classList.remove('hidden');
+                        document.getElementById('shift_display').innerText = data.shift_display;
+                    } else {
+                        shiftRow.classList.add('hidden');
+                    }
 
                     currentChargingStart = data.charging_start_utc;
                     document.getElementById('notify_time').innerText = data.next_notification || "N/A";
@@ -229,6 +236,7 @@
                 } else {
                     sessionRow.classList.add('hidden');
                     notifyRow.classList.add('hidden');
+                    shiftRow.classList.add('hidden');
                     currentChargingStart = null;
                 }
 
@@ -240,7 +248,8 @@
                     muteBtn.innerText = '🔊 Unmute Notifications';
                 } else {
                     muteRow.classList.add('hidden');
-                    muteBtn.innerText = '🔇 Mute until 6 AM';
+                    const muteTarget = data.current_shift === 'day' ? '6 PM' : '6 AM';
+                    muteBtn.innerText = `🔇 Mute until ${muteTarget}`;
                 }
             } catch (e) {
                 console.error("Dashboard update failed:", e);
@@ -282,6 +291,10 @@
             <div class="item">
                 <div class="label">Vehicle State</div>
                 <div id="charging" class="value">...</div>
+            </div>
+            <div id="shift_row" class="item hidden">
+                <div class="label">Parking Shift</div>
+                <div id="shift_display" class="value" style="color: var(--accent);">...</div>
             </div>
             <div id="session_row" class="item hidden">
                 <div class="label">Time since Plugged In</div>

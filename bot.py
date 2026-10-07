@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from state import state
 
 class ChargerBot(commands.Bot):
-    def __init__(self, token, user_id, hour, minute):
+    def __init__(self, token, user_id, hour=None, minute=None):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix="!", intents=intents)
@@ -44,18 +44,8 @@ class ChargerBot(commands.Bot):
         while True:
             now_utc = datetime.now(timezone.utc)
             now_pacific = now_utc.astimezone(self.tz_pacific)
-            
-            # 1. Calculate next target time for display
-            target_today = now_pacific.replace(hour=self.hour, minute=self.minute, second=0, microsecond=0)
-            if now_pacific >= target_today:
-                next_target_pacific = target_today + timedelta(days=1)
-            else:
-                next_target_pacific = target_today
-            
-            state.next_target_time = next_target_pacific.astimezone(timezone.utc)
-            state.save()
 
-            # 2. Check if we should send a reminder
+            # Check if we should send a reminder
             if state.charging_active:
                 # Check for mute expiration
                 if state.is_muted and state.muted_until:
@@ -74,12 +64,11 @@ class ChargerBot(commands.Bot):
                     # Delete previous reminder if it exists
                     if state.last_reminder_id:
                         try:
-                            # Use user.dm_channel or fetch it
                             dm = user.dm_channel or await user.create_dm()
                             msg = await dm.fetch_message(state.last_reminder_id)
                             await msg.delete()
                         except Exception:
-                            pass # Message already deleted or not found
+                            pass  # Message already deleted or not found
                     
                     try:
                         new_msg = await user.send(text)
@@ -88,42 +77,51 @@ class ChargerBot(commands.Bot):
                     except Exception as e:
                         print(f"Failed to send/save reminder: {e}")
 
-                # Original reminder logic follows...
-                # If we are past today's target time AND we haven't sent a reminder yet today
-                if now_pacific >= target_today and state.last_reminder_date != now_pacific.date():
-                    try:
-                        user = await self.fetch_user(int(self.user_id))
-                        await send_reminder(user, "🚨 Reminder: Unplug your car!")
-                        state.last_reminder_date = now_pacific.date()
-                        state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
-                        state.save()
-                        print(f"Sent daily reminder at {now_pacific}")
-                    except Exception as e:
-                        print(f"Failed to send reminder: {e}")
-                
-                # If we already sent the daily reminder, handle nag logic
-                elif state.last_reminder_date == now_pacific.date():
-                    # If we don't have a next nag time set (e.g. just plugged back in), set one
+                # If target time is missing for some reason, re-evaluate it
+                if not state.next_target_time:
+                    shift, target_utc = state.calculate_shift_and_target(now_utc)
+                    state.current_shift = shift
+                    state.next_target_time = target_utc
+                    state.save()
+
+                # 1. Initial reminder for the active shift
+                if not state.initial_reminder_sent:
+                    if state.next_target_time and now_utc >= state.next_target_time:
+                        try:
+                            user = await self.fetch_user(int(self.user_id))
+                            if state.current_shift == "day":
+                                reminder_msg = "🚨 Reminder: Pick up your car! (Day parking window ends at 6:00 PM)"
+                            else:
+                                reminder_msg = "🚨 Reminder: Time to pick up / unplug your car!"
+
+                            await send_reminder(user, reminder_msg)
+                            state.initial_reminder_sent = True
+                            state.last_reminder_date = now_pacific.date()
+                            state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
+                            state.save()
+                            print(f"Sent initial {state.current_shift} reminder at {now_pacific}")
+                        except Exception as e:
+                            print(f"Failed to send reminder: {e}")
+
+                # 2. Nag reminder every 15 minutes after initial reminder
+                else:
                     if not state.next_interval_time:
                         state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
                         state.save()
-                        print(f"Car replugged after daily reminder. Next nag scheduled for {state.next_interval_time}")
-                    
-                    # Check if it's time to nag
                     elif now_utc >= state.next_interval_time:
                         try:
                             user = await self.fetch_user(int(self.user_id))
-                            await send_reminder(user, "⚠️ Still plugged in! Don't forget to unplug.")
+                            await send_reminder(user, "⚠️ Still plugged in! Don't forget to pick up your car.")
                             state.next_interval_time = datetime.now(timezone.utc) + timedelta(minutes=15)
                             state.save()
                             print(f"Sent nag reminder at {now_pacific}")
                         except Exception as e:
                             print(f"Failed to send nag: {e}")
             else:
-                # If not charging, clear the nag timer so it resets upon next plug-in
+                # If not charging, clear nag timers
                 state.next_interval_time = None
 
-            await asyncio.sleep(30) # Check every 30 seconds
+            await asyncio.sleep(30)  # Check every 30 seconds
 
 def setup_bot(bot, token):
     @bot.tree.command(name="plugged", description="Enable car charging reminders")
@@ -132,16 +130,26 @@ def setup_bot(bot, token):
         await interaction.response.send_message("🚿 Cleaning history and enabling reminders...")
         status_msg = await interaction.original_response()
         await bot._clear_history(interaction.channel, before=status_msg)
-        state.set_plugged()
-        # Update the initial message to confirm
-        await interaction.edit_original_response(content="🔌 History cleaned. Reminders enabled.")
+        shift, target_utc = state.set_plugged()
+        target_pacific = target_utc.astimezone(bot.tz_pacific)
+        now_utc = datetime.now(timezone.utc)
+
+        shift_label = "Day Shift (6 AM - 6 PM)" if shift == "day" else "Night Shift (6 PM - 6 AM)"
+        if target_utc <= now_utc:
+            sched_str = "Immediate reminder (then every 15 min)"
+        else:
+            sched_str = f"Reminder set for {target_pacific.strftime('%I:%M %p')} (then every 15 min)"
+
+        await interaction.edit_original_response(
+            content=f"🔌 History cleaned. Reminders enabled for **{shift_label}**.\n⏰ {sched_str}."
+        )
 
     @bot.tree.command(name="unplugged", description="Disable car charging reminders")
     async def unplugged(interaction: discord.Interaction):
         state.set_unplugged()
         await interaction.response.send_message("📴 Done. Reminders off.")
 
-    @bot.tree.command(name="mute", description="Mute reminders until 6 AM PST")
+    @bot.tree.command(name="mute", description="Mute reminders until shift ends")
     async def mute(interaction: discord.Interaction):
         mute_until = state.set_mute(bot.tz_pacific)
         await interaction.response.send_message(f"🔇 Muted until {mute_until.strftime('%I:%M %p %Z')}")

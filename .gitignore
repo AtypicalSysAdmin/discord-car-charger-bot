@@ -22,6 +22,10 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Graphify output
+graphify-out/
+graphify-out
+
 # Environments
 .env
 .venv

@@ -8,8 +8,8 @@ from dashboard import run_dashboard
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 YOUR_USER_ID = os.getenv('YOUR_USER_ID')
-REMINDER_HOUR = int(os.getenv('REMINDER_HOUR'))
-REMINDER_MINUTE = int(os.getenv('REMINDER_MINUTE'))
+REMINDER_HOUR = int(os.getenv('REMINDER_HOUR', 17))
+REMINDER_MINUTE = int(os.getenv('REMINDER_MINUTE', 0))
 
 def main():
     # 1. Initialize the Discord Bot

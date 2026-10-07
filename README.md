@@ -1,16 +1,18 @@
 # EV Charger Discord Bot 🚗⚡
 
-A robust Discord-integrated EV charging reminder system with a real-time glassmorphic dashboard. Designed to ensure you never forget to unplug your car at night.
+A robust Discord-integrated EV charging reminder system with a real-time glassmorphic dashboard. Supports dual-shift parking schedules (6 AM – 6 PM & 6 PM – 6 AM).
 
 ## ✨ Features
 
--   **Discord Command System**: Simple `/plugged` and `/unplugged` commands to manage charging state.
--   **Smart Daily Reminders**: Sends a high-priority notification at a configurable time (e.g., 10:30 PM).
--   **Reactive Logic**: If you plug in *after* the scheduled time, the bot detects it within 30 seconds and notifies you immediately.
--   **Persistent Nags**: Once the daily reminder is sent, the bot will gently "nag" you every 15 minutes until the `/unplugged` command is run.
+-   **Discord Command System**: Simple `/plugged` and `/unplugged` commands to manage charging state with automatic DM history cleanup.
+-   **Smart Shift Detection**:
+    -   **Day Shift (6:00 AM – 6:00 PM)**: Sets reminder for **5:00 PM** (1 hour before cutoff), nagging every 15 minutes to pick up your car.
+    -   **Night Shift (6:00 PM – 6:00 AM)**: Sets reminder for **10:00 PM**, nagging every 15 minutes until unplugged.
+-   **Reactive & Immediate Alerts**: If you plug in after the target time (e.g. after 5:00 PM in day shift, or after 10:00 PM in night shift), reminders begin immediately.
+-   **Persistent 15-Minute Nags**: Continues sending 15-minute reminders until the `/unplugged` command is triggered.
 -   **Live Dashboard**: A beautiful, premium dark-mode web interface to monitor:
     -   **System Uptime**: Total bot runtime.
-    -   **Vehicle State**: Live status (Plugged In / Unplugged).
+    -   **Vehicle State & Parking Shift**: Live status and detected shift (Day Shift vs. Night Shift).
     -   **Charging Session**: Real-time timer showing exactly how long you've been plugged in.
     -   **Next Notification**: Accurate clock time (US/Pacific) showing exactly when the next alert will trigger.
 -   **Universal Time Management**: Uses timezone-aware UTC logic for perfect reliability across servers.

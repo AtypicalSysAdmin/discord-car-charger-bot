@@ -29,29 +29,31 @@ def get_status_data():
     # Next Notification (Absolute Time)
     notify_time_str = "N/A"
     if state.charging_active:
-        possible_times = []
-        if state.next_target_time:
-            possible_times.append(state.next_target_time)
-        if state.next_interval_time:
-            possible_times.append(state.next_interval_time)
-            
-        if possible_times:
-            # We want the absolute time of the EARLIEST future notification
-            # Ensure all are converted to aware UTC for comparison
-            now_aware = datetime.now(timezone.utc)
-            future_times = [t if t.tzinfo else t.replace(tzinfo=timezone.utc) for t in possible_times]
-            future_times = [t for t in future_times if t > now_aware]
-            
-            if future_times:
-                earliest = min(future_times)
-                # Convert to Pacific for display
-                earliest_pacific = earliest.astimezone(tz_pacific)
-                notify_time_str = earliest_pacific.strftime("%I:%M %p") # e.g. 10:30 PM
+        target = None
+        if not state.initial_reminder_sent and state.next_target_time:
+            target = state.next_target_time
+        elif state.next_interval_time:
+            target = state.next_interval_time
+        elif state.next_target_time:
+            target = state.next_target_time
+
+        if target:
+            target_aware = target if target.tzinfo else target.replace(tzinfo=timezone.utc)
+            if target_aware <= now:
+                notify_time_str = "Due now"
+            else:
+                notify_time_str = target_aware.astimezone(tz_pacific).strftime("%I:%M %p")
+
+    shift_display = None
+    if state.charging_active and state.current_shift:
+        shift_display = "Day Shift (6 AM - 6 PM)" if state.current_shift == "day" else "Night Shift (6 PM - 6 AM)"
 
     return {
         "bot_uptime": f"{uptime_delta.days}d {uptime_delta.seconds // 3600}h {(uptime_delta.seconds // 60) % 60}m",
         "charging": state.charging_active,
         "charging_start_utc": start_utc,
+        "current_shift": state.current_shift,
+        "shift_display": shift_display,
         "next_notification": notify_time_str,
         "is_muted": state.is_muted,
         "muted_until": state.muted_until.astimezone(tz_pacific).strftime("%I:%M %p") if state.muted_until else None
